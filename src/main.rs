@@ -1,0 +1,110 @@
+use std::io::stdout;
+use color_eyre::Result;
+use crossterm::event::{self, Event, KeyCode};
+use ratatui::{
+    backend::CrosstermBackend,
+    widgets::{Block, Borders, List, ListItem, BorderType},
+    style::{Style, Color, Modifier},
+    Terminal,
+};
+use std::io;
+use crossterm::{execute, cursor::{Hide, Show}, terminal::{EnterAlternateScreen, LeaveAlternateScreen}};
+
+/// draw
+///
+/// # Arguments
+/// * `terminal` - Reference to terminal object
+/// * `options` - Slice of option strings to display
+/// * `choice` - Current selected index
+///
+/// # Returns
+/// is successful?
+fn draw(terminal: &mut Terminal<CrosstermBackend<&mut io::Stdout>>, options: &[&str], choice: usize) -> Result<()> {
+    terminal.draw(|f| {
+        let items: Vec<ListItem> = options
+            .iter()
+            .enumerate()
+            .map(|(i, text)| {
+                let prefix = if i == choice { "> " } else { "  " };
+                ListItem::new(format!("{}{}", prefix, text))
+            })
+            .collect();
+
+        let list = List::new(items).block(Block::default()
+            .borders(Borders::ALL)
+            .title("──┤ Tuibian ├──")
+            .border_style(Style::default()
+                .fg(Color::Cyan)
+                .add_modifier(Modifier::BOLD))
+            .border_type(BorderType::Rounded),
+        );
+        f.render_widget(list, f.area());
+    })?;
+    Ok(())
+}
+
+/// input
+///
+/// # Arguments
+/// * `options_len` - Length of options
+/// * `current` - Mutable reference to current selected index
+//// # Returns
+/// is exit flag?
+fn input(options_len: usize, current: &mut usize) -> Result<bool> {
+    if event::poll(std::time::Duration::from_millis(200))? {
+        if let Event::Key(key) = event::read()? {
+            match key.code {
+                KeyCode::Up => *current = if *current == 0 { options_len - 1 } else { *current - 1 },
+                KeyCode::Down => *current = if *current == options_len - 1 { 0 } else { *current + 1 },
+                KeyCode::Enter | KeyCode::Esc => return Ok(true),
+                _ => {}
+            }
+        }
+    }
+    Ok(false)
+}
+
+/// main
+fn main() -> Result<()> {
+    color_eyre::install()?;
+
+    let mut stdout = stdout();
+    execute!(stdout, EnterAlternateScreen, Hide)?;
+    crossterm::terminal::enable_raw_mode()?;
+
+    let backend = CrosstermBackend::new(&mut stdout);
+    let mut terminal = Terminal::new(backend)?;
+
+    let options = vec!["vim", "fmtui", "btop", "nmtui"];
+    let mut choice = 0;
+
+    loop {
+        draw(&mut terminal, &options, choice)?;
+        if input(options.len(), &mut choice)? {
+            break;
+        }
+    }
+
+    crossterm::terminal::disable_raw_mode()?;
+    drop(terminal);
+    execute!(stdout, LeaveAlternateScreen, Show)?;
+
+    match options[choice] {
+        "vim" => {
+            std::process::Command::new("vim").status()?;
+        }
+        "fmtui" => {
+            std::process::Command::new("fmtui").status()?;
+        }
+        "btop" => {
+            std::process::Command::new("btop").status()?;
+        }
+        "nmtui" => {
+            std::process::Command::new("nmtui").status()?;
+        }
+        _ => {}
+    }
+
+    //println!("selected: {}", options[choice]);
+    Ok(())
+}

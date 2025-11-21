@@ -1,0 +1,13 @@
+[package]
+name = "tuibian-menu"
+version = "0.0.1"
+edition = "2024"
+
+[dependencies]
+color-eyre = "0.6.5"
+crossterm = "0.29.0"
+ratatui = "0.29.0"
+
+[[bin]]
+name = "tb-menu"
+path = "src/main.rs"
