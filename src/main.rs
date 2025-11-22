@@ -8,7 +8,11 @@ use ratatui::{
     Terminal,
 };
 use std::io;
-use crossterm::{execute, cursor::{Hide, Show}, terminal::{EnterAlternateScreen, LeaveAlternateScreen}};
+use crossterm::{
+    execute, 
+    cursor::{Hide, Show}, 
+    terminal::{EnterAlternateScreen, LeaveAlternateScreen, enable_raw_mode, disable_raw_mode}
+};
 
 /// draw
 ///
@@ -68,43 +72,50 @@ fn input(options_len: usize, current: &mut usize) -> Result<bool> {
 fn main() -> Result<()> {
     color_eyre::install()?;
 
-    let mut stdout = stdout();
-    execute!(stdout, EnterAlternateScreen, Hide)?;
-    crossterm::terminal::enable_raw_mode()?;
-
-    let backend = CrosstermBackend::new(&mut stdout);
-    let mut terminal = Terminal::new(backend)?;
-
-    let options = vec!["vim", "fmtui", "btop", "nmtui"];
+    let options = vec!["vim", "fmtui", "btop", "nmtui", "quit"];
     let mut choice = 0;
 
     loop {
-        draw(&mut terminal, &options, choice)?;
-        if input(options.len(), &mut choice)? {
-            break;
+        let mut stdout = stdout();
+
+        execute!(stdout, EnterAlternateScreen, Hide)?;
+        enable_raw_mode()?;
+
+        let backend = CrosstermBackend::new(&mut stdout);
+        let mut terminal = Terminal::new(backend)?;
+
+        loop {
+            draw(&mut terminal, &options, choice)?;
+            if input(options.len(), &mut choice)? {
+                break;
+            }
+        }
+
+        disable_raw_mode()?;
+
+        drop(terminal);
+
+        execute!(stdout, LeaveAlternateScreen, Show)?;
+
+        match options[choice] {
+            "vim" => {
+                std::process::Command::new("vim").status()?;
+            }
+            "fmtui" => {
+                std::process::Command::new("fmtui").status()?;
+            }
+            "btop" => {
+                std::process::Command::new("btop").status()?;
+            }
+            "nmtui" => {
+                std::process::Command::new("nmtui").status()?;
+            }
+            "quit" => {
+                break;
+            }
+            _ => {}
         }
     }
 
-    crossterm::terminal::disable_raw_mode()?;
-    drop(terminal);
-    execute!(stdout, LeaveAlternateScreen, Show)?;
-
-    match options[choice] {
-        "vim" => {
-            std::process::Command::new("vim").status()?;
-        }
-        "fmtui" => {
-            std::process::Command::new("fmtui").status()?;
-        }
-        "btop" => {
-            std::process::Command::new("btop").status()?;
-        }
-        "nmtui" => {
-            std::process::Command::new("nmtui").status()?;
-        }
-        _ => {}
-    }
-
-    //println!("selected: {}", options[choice]);
     Ok(())
 }
