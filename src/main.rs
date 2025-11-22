@@ -1,6 +1,13 @@
 use std::io::stdout;
 use color_eyre::Result;
-use crossterm::event::{self, Event, KeyCode};
+use crossterm::event::{
+    self, 
+    Event, 
+    KeyCode, 
+    MouseEventKind, 
+    EnableMouseCapture, 
+    DisableMouseCapture,
+};
 use ratatui::{
     backend::CrosstermBackend,
     widgets::{Block, Borders, List, ListItem, BorderType},
@@ -11,7 +18,7 @@ use std::io;
 use crossterm::{
     execute, 
     cursor::{Hide, Show}, 
-    terminal::{EnterAlternateScreen, LeaveAlternateScreen, enable_raw_mode, disable_raw_mode}
+    terminal::{EnterAlternateScreen, LeaveAlternateScreen, enable_raw_mode, disable_raw_mode},
 };
 
 const OPTIONS: [&str; 6] = ["vim", "fmtui", "btop", "nmtui", "", "quit"];
@@ -25,23 +32,23 @@ fn main() -> Result<()> {
 
     loop {
         let mut stdout = stdout();
-
-        execute!(stdout, EnterAlternateScreen, Hide)?;
+        
+        execute!(stdout, EnterAlternateScreen, Hide, EnableMouseCapture)?;
         enable_raw_mode()?;
 
         let backend = CrosstermBackend::new(&mut stdout);
         let mut terminal = Terminal::new(backend)?;
 
         loop {
-            draw(&mut terminal, &options, choice)?;
-            if input(options.len(), &mut choice)? {
+             let area = draw(&mut terminal, &options, choice)?;
+            if input(options.len(), &mut choice, area)? {
                 break;
             }
         }
 
         disable_raw_mode()?;
         drop(terminal);
-        execute!(stdout, LeaveAlternateScreen, Show)?;
+        execute!(stdout, LeaveAlternateScreen, Show, DisableMouseCapture)?;
 
         match options[choice] {
             "vim" => { std::process::Command::new("vim").status()?; }
@@ -65,8 +72,13 @@ fn main() -> Result<()> {
 ///
 /// # Returns
 /// is successful?
-fn draw(terminal: &mut Terminal<CrosstermBackend<&mut io::Stdout>>, options: &[&str], choice: usize) -> Result<()> {
+fn draw(terminal: &mut Terminal<CrosstermBackend<&mut io::Stdout>>, options: &[&str], choice: usize) -> Result<ratatui::layout::Rect> {
+    let mut area = ratatui::layout::Rect::default();
+
     terminal.draw(|f| {
+        let size = f.area();
+        area = size;
+
         let items: Vec<ListItem> = options
             .iter()
             .enumerate()
@@ -84,9 +96,9 @@ fn draw(terminal: &mut Terminal<CrosstermBackend<&mut io::Stdout>>, options: &[&
                 .add_modifier(Modifier::BOLD))
             .border_type(BorderType::Rounded),
         );
-        f.render_widget(list, f.area());
+        f.render_widget(list, area);
     })?;
-    Ok(())
+    Ok(area)
 }
 
 /// input
@@ -96,9 +108,10 @@ fn draw(terminal: &mut Terminal<CrosstermBackend<&mut io::Stdout>>, options: &[&
 /// * `choice` - Mutable reference to choice index
 //// # Returns
 /// is exit flag?
-fn input(options_len: usize, choice: &mut usize) -> Result<bool> {
+fn input(options_len: usize, choice: &mut usize, list_area: ratatui::layout::Rect) -> Result<bool> {
     if event::poll(std::time::Duration::from_millis(200))? {
-        if let Event::Key(key) = event::read()? {
+        let ev = event::read()?;
+        if let Event::Key(key) = ev {
             match key.code {
                 KeyCode::Up => {
                     loop {
@@ -118,6 +131,21 @@ fn input(options_len: usize, choice: &mut usize) -> Result<bool> {
                 }            
                 KeyCode::Enter | KeyCode::Esc => return Ok(true),
                 _ => {}
+            }
+        }
+
+        if let Event::Mouse(btn) = ev {
+            if let MouseEventKind::Down(_) = btn.kind {
+                let x = btn.column;
+                let y = btn.row;
+
+                if x >= list_area.x && x < list_area.x + list_area.width && y >= list_area.y && y < list_area.y + list_area.height {
+                    let index = (y - list_area.y - 1) as usize;
+                    if index < options_len && !OPTIONS[index].is_empty() {
+                        *choice = index;
+                        return Ok(true);
+                    }
+                }
             }
         }
     }
